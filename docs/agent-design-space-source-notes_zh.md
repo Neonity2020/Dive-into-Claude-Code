@@ -374,6 +374,17 @@ AWS 于 9 月 10 日披露 CVE-2026-87912 和 CVE-2026-87913。Security Agent �
 
 **设计意义：**轨迹可以用于形成经审查的规格、可运行任务和回归检查。Perceived Error 被官方明确称为满足用户需求的代理信号，不能直接作为最终正确性判断。任务生成文章提供的是工程经验，尚非受控实验。
 
+### 信息流、记忆与适配
+
+| 来源与版本 | 机制 |
+|:---|:---|
+| [Twin Agent，7 月 21 日，v1](https://arxiv.org/html/2607.19595v1) | 将不可信信息的读取权限与行动权限分开，两类 agent 通过简短提示通信。 |
+| [MemSecBench，7 月 29 日，v1](https://arxiv.org/html/2607.27080v1) | 跨 agent 与记忆后端配置，追踪恶意内容的写入、后续使用和选择性修复。 |
+| [Living-Harness，8 月 11 日，v2](https://arxiv.org/html/2607.26598v2) | 在一次交互任务完成并评分后，更新可检索的程序性记忆和状态图。 |
+| [APPA，8 月 26 日，v2](https://arxiv.org/html/2607.24625v2) | 分别检查执行前的调用与进入上下文前的返回结果，用临时分支处理不可信数据。 |
+| [Self-Evolving Coding Agents，8 月 29 日，v3](https://arxiv.org/html/2608.03392v3) | 综述更新对象、发生时点、反馈来源与评价方式。 |
+| [Multi-Harness RL，9 月 3 日，v1](https://arxiv.org/html/2609.04518v1) | 区分接触多种 harness 和跨 harness 计算训练收益，并用未参与训练的 harness 检查迁移。 |
+
 <a id="较早资料与本轮未采用的主张"></a>
 
 ### 其他资料及其适用范围
@@ -411,10 +422,10 @@ AWS 于 9 月 10 日披露 CVE-2026-87912 和 CVE-2026-87913。Security Agent �
 | 2026-08-07 | [Codex 0.147.0](https://github.com/openai/codex/releases/tag/rust-v0.147.0) | 插件目录、MCP 2026-07-28、对话和技能导入、远端压缩、项目信任确认、凭据脱敏，以及插件策略失败时默认关闭网络。 |
 | 2026-08-04 | [Warp Agent CLI](https://www.warp.dev/blog/introducing-the-warp-agent-cli-coding-agent) | 以 PTY multiplexer 管理会话，支持交互式程序、SSH 连接延续、跨 harness 委派和本地到云端移交。 |
 | 2026-07-29 | [Deep Agents v0.7](https://www.langchain.com/blog/deep-agents-v0-7) | 作者报告：删减系统提示和待办脚手架后，基础输入下降约 65%；报告中的多模型评测没有显示整体得分明显下降。 |
-| 2026-07-31 | [LoopsBench](https://arxiv.org/abs/2608.00267) | 用依赖感知测试、持续回归检查和外层续跑循环评测长期开发任务。 |
+| 2026-07-31 | [LoopsBench](https://arxiv.org/abs/2608.00267v1) | 用依赖感知测试、持续回归检查和外层续跑循环评测长期开发任务。 |
 | 2026-08-01 | [Ledger](https://arxiv.org/abs/2608.00808) | 在不增加模型调用的情况下记录证据、依赖和验证进度，并在完整 SWE-bench Verified 上同时提高成功率、降低成本。 |
 | 2026-08-03 | [Rethinking Self-Evolving Agent Skills](https://arxiv.org/abs/2608.02636) | 实验表明技能演化更接近由验证集筛选的稀疏搜索，失败轨迹在最终入选的技能中都发挥了作用。 |
-| 2026-08-04 | [The Resume Contract](https://arxiv.org/abs/2608.03836) | 形式化分析和框架实测都说明，提供 checkpoint API 并不等于能够保证恰好执行一次。 |
+| 2026-08-04 | [The Resume Contract](https://arxiv.org/abs/2608.03836v1) | 形式化分析和框架实测都说明，提供 checkpoint API 并不等于能够保证恰好执行一次。 更新后的协议与一致性结果见 [8 月 8 日的 v3](https://arxiv.org/abs/2608.03836v3)。 |
 | 2026-08-05 | [Active-SWE](https://arxiv.org/abs/2608.04682) | 拿掉 issue 报告后，主动发现缺陷表现为不同于“根据 issue 修补代码”的能力。 |
 | 2026-08-05 | [SciCode-Verified](https://arxiv.org/abs/2608.04975) | 修正 263 处基准缺陷，包括 192 次对正确答案的误判，显著改变了最终准确率。 |
 | 2026-08-05 | [恶意 Skill 文件](https://arxiv.org/abs/2608.05223) | 这项合成实验测量了两个代码智能体 CLI 处理恶意技能文件时的表现。 |
@@ -434,7 +445,7 @@ AWS 于 9 月 10 日披露 CVE-2026-87912 和 CVE-2026-87913。Security Agent �
 | [SuperScout](https://arxiv.org/abs/2608.04804) | 先探索、再把核验过的信息交给修复智能体的做法值得关注，但学习得到的路由器在 266 题切片上没有超过“固定选择最便宜修复器”的基线。 |
 | [OneDayAgent](https://arxiv.org/abs/2608.05013) | 同一套长程 harness 可以适配多个模型后端，但目前只测试了一个基准，也没有工作区隔离。 |
 | [Verified Tool Calls](https://arxiv.org/abs/2608.02645) | “验证后再重试”的模式很清楚，但只在两个模拟工作流和手写验证器上演示。 |
-| [Self-Evolving Coding Agents](https://arxiv.org/abs/2608.03392) | 分类框架和文献索引有用，但没有新增实验。 |
+| [Self-Evolving Coding Agents，v1](https://arxiv.org/abs/2608.03392v1) | 关于 agent 演化的综述；[8 月 29 日修订版](https://arxiv.org/abs/2608.03392v3)按更新对象、发生时点、反馈来源与评价方式组织相关工作。 |
 | [LangSmith LLM Gateway](https://www.langchain.com/blog/langsmith-llm-gateway-runtime-controls-for-production-agents) | 提供外置的策略控制面。 |
 | [AgentCore OBO token exchange](https://aws.amazon.com/blogs/machine-learning/implement-on-behalf-of-token-exchange-for-multi-tenant-agents-with-amazon-bedrock-agentcore-gateway/) | 提供了具体的身份委派架构。 |
 

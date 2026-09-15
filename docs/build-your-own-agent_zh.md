@@ -26,6 +26,8 @@
 
 图可以规定依赖和验收条件，节点内的 agent 则自主选择下一步行动。例如，[LangGraph 的 agent 示例](https://docs.langchain.com/oss/python/langgraph/workflows-agents#agents)通过条件边，根据模型是否调用工具来决定继续还是停止。实际设计中，可以把这样的结构与反馈循环结合，由 harness 执行动作并记录结果。需要选择的是哪些关系必须明确表达，哪些决策可以保持开放。
 
+**保留前面已经满足的要求。** [LoopsBench](https://arxiv.org/html/2608.00267v1#S2.SS6)从开始就提供全部附带测试，但只有前置单元通过后，才启用当前开发单元的评分。已完成单元的测试会在后续工作中继续作为回归检查。agent 仍可自行选择编辑位置。
+
 **图也可以用于审查已完成的工作。** [Trace2Flow](https://arxiv.org/html/2609.13136v1#S4) 是一个研究原型，它把已完成的 agent 执行轨迹转成可编辑的工作流图。用户可以查看每步的输入输出、修改依赖并重新运行步骤。控制图指导执行，这种图则在运行后组织已记录的工作。应保留每个步骤与其轨迹证据的联系。
 
 **可以问自己的问题：**
@@ -50,6 +52,10 @@
 **从 Claude Code 得到的启发：** 分层检查需要明确的回退行为。如果解析、分类或预算限制导致某项检查无法完成，应提前规定是拒绝操作、在隔离环境中执行，还是交给用户审阅。检查数量多，并不说明它们具有独立的故障模式。
 
 **授权有作用域，也有有效期。** 应区分持久策略、运行模式，以及针对某个动作或会话的授权。委派任务或恢复会话时，只应携带对当前资源和环境仍然有效的权限。持久化方面的影响见[决策 6](#决策-6会话如何持久化)。
+
+**区分信息访问与行动权限。** [Twin Agent](https://arxiv.org/html/2607.19595v1#S3.SS3) 的读取者从不可信来源提取提示，在固定长度限制内发给执行者。只有执行者能执行特权动作，它不能直接读取这些来源。应明确每个 agent 的输入与权限，再检查两者之间允许传递什么。
+
+[APPA v2](https://arxiv.org/html/2607.24625v2#S4)在执行前检查工具调用，并在数据进入上下文前检查实际返回值。它可以通过临时分支查看不可信数据，并预先限定返回格式。拒绝接收返回数据，不会撤销已经发生的外部效果。
 
 **可以问自己的问题：**
 
@@ -120,6 +126,8 @@ Codex 9 月 8 日的[主线更新](https://github.com/openai/codex/commit/2cbbf0
 
 这里描述的是概念边界，实现不必使用这些函数名。对每个扩展，都要区分安装或更新权限与实际执行动作的权限。
 
+**明确一次工具操作如何跨越多个请求。** [MCP 2026-07-28](https://modelcontextprotocol.io/specification/2026-07-28/changelog)移除了协议级会话，应用通过显式句柄传递跨调用状态。工具需要补充输入时，[多轮请求协议](https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/mrtr)返回 `input_required`；客户端带上 `inputResponses` 重试，并原样回传服务端提供的 `requestState`。这些是同一逻辑操作的多个独立请求，因此需要明确谁保存操作状态，以及重试如何处理可能已经发生的效果。
+
 **将命令授权绑定到已审阅的输入。** 在 [Claude Code v2.1.271](https://code.claude.com/docs/en/plugins-reference#plugin-install) 中，安装或更新插件可能需要用户批准市场声明的命令。命令显示但未执行时，`--json` 结果会包含该命令及其摘要值。用户审阅命令后，在自己的终端中传入 `--accept-command <sha256>`。同意绑定到该命令、插件和市场目录，任一项变化都会使其失效。
 
 **可以问自己的问题：**
@@ -143,6 +151,10 @@ Codex 9 月 8 日的[主线更新](https://github.com/openai/codex/commit/2cbbf0
 **从 Claude Code 得到的启发：** 上下文隔离可以把详细探索留在子会话里。委派仍有成本，需要测量总模型工作量、重复探索和协调开销。独立上下文也不意味着文件系统、进程或权限相互隔离。
 
 **定义角色时，也要定义交接条件。** 每项任务都需要负责人、依赖、交付物和验收条件。[Agent Graph v0.3.0](https://github.com/context4ai/agent-graph/blob/387f80db65bf20a61bc666b4fa885200fcedad08/src/evaluator.ts#L137)提供了一个具体例子：对于带 `satisfiedBy` 条件的非终止节点，如果仅被标记为完成，而输入事实不满足条件，结果仍是 `unverified`。这实现了一种完成检查；宿主系统仍需负责提供可信事实。
+
+**在接受并发改动前检查它们能否共存。** 独立 worktree 让 agent 可以分别编辑，但各自的改动仍可能冲突。[Claim Plane 原型](https://arxiv.org/pdf/2607.21909v1)在写入前检查带版本的修改意图；扩大范围时，也要重新检查才能执行新增修改。任务分配、写入权限和合并结果的验收需要分别决定。
+
+**明确谁持有共享会话状态。** 在 [Agent Host Protocol](https://code.visualstudio.com/blogs/2026/08/26/agent-host-architecture) 中，宿主持有会话，并向多个客户端发送快照和有序更新。每个 harness 保留自己的 agent 循环、上下文管理和工具。因此，共同的会话接口仍需明确客户端操作在何时生效。
 
 **明确消息何时生效。** [VS Code 1.137](https://code.visualstudio.com/updates/v1_137#_agent-queued-messages) 会将 agent 发给忙碌 chat 的消息排队，当前回合成功结束后再按发送顺序开始处理排队消息。通过其 [Agent Host 工具](https://code.visualstudio.com/docs/agents/run/sessions/manage-sessions#_orchestrate-sessions-from-agent-host-sessions) 向另一会话发送消息需要用户确认。既要规定发送权限，也要规定交付时机。
 
@@ -172,6 +184,8 @@ Codex 9 月 8 日的[主线更新](https://github.com/openai/codex/commit/2cbbf0
 **持久化还需要恢复协议。** 应记录哪个 worker 负责哪项任务、哪些外部动作已经完成，以及哪些结果仍待交付。发生崩溃后，要明确谁有权重试，怎样避免或处理重复副作用。仅有检查点，并不能保证外部操作恰好执行一次。
 
 例如，Temporal 的 Deep Agents 集成在[发布时标为 pre-release](https://temporal.io/blog/durable-digest-august-2026)，将可重放的 Workflow 状态与 Activity 中的模型调用、外部 I/O 分开。[集成文档](https://docs.temporal.io/develop/python/integrations/deepagents)要求按规定包装会访问外部资源的工具和后端；持久执行依赖这些边界得到正确实现。
+
+**区分重试与新工作。** [Resume Means Resume v3](https://arxiv.org/html/2608.03836v3#S3)区分普通恢复与有意创建分支，并检查一次批准是否已经被使用。外部效果可能已完成、但结果尚未记录时，应保留操作标识。还要明确暂停时哪些工作仍在进行：[Temporal 处于 pre-release 的暂停功能](https://docs.temporal.io/encyclopedia/workflow/workflow-pause)停止新派发，但正在运行的 Activity 仍可完成。
 
 **为计划和活跃运行分别设置控制。** [VS Code Automations](https://code.visualstudio.com/docs/agents/run/automations) 处于 Preview。禁用计划会阻止后续计划运行，但不会停止当前运行；停止该会话是另一项操作。计划执行还要求机器保持唤醒：Agent Host 类型的自动化需要宿主进程运行，其他类型需要 VS Code 窗口运行。
 
@@ -210,6 +224,17 @@ Codex 9 月 8 日的[主线更新](https://github.com/openai/codex/commit/2cbbf0
 Mastra Factory 当前的[看板规则](https://factory.mastra.ai/configure/boards-and-rules)分别定义允许的阶段转移、审批策略，以及进入和离开阶段时执行的动作。列出允许的转移不会自动移动卡片。应检查什么事件触发移动、是否需要审批、由谁审批，以及卡片离开或进入阶段时运行哪些动作。
 
 [LoopArena](https://arxiv.org/html/2608.28281v1#S2)在固定 Worker 的条件下评估控制决策；它的只读 Reporter 负责整理证据，不能运行测试。[HarnessLens](https://arxiv.org/html/2608.27311v1#S4)围绕候选改动的目标行为选择检查任务，并保留独立测试集。评估技能更新时，应区分决定是否接受修改的案例与留作最终测试的案例：[SkillAdam](https://arxiv.org/html/2609.08944v1#S5.SS3)复用采样案例判断是否接受修改，并另留测试集。
+
+**明确更新的对象。** 记忆、技能、运行时代码和模型权重需要不同的检查。
+
+| 更新对象 | 代表机制 | 应检查什么 |
+|:---------|:---------|:-----------|
+| **可检索记忆** | [Living-Harness v2](https://arxiv.org/html/2607.26598v2)在运行经过评价后，更新记忆和状态图。后续任务检索这些记录作为指导。 | 证据、适用范围，以及后续是否检索到纠正后的指导。 |
+| **技能及其关系** | [GSE](https://arxiv.org/html/2608.06153v1#S3)修改技能内容和技能间的关系，包括依赖与冲突。 | 回放涉及受影响技能的案例，再用独立案例测试。 |
+| **运行时代码与工具** | [Better Harnesses, Smaller Models](https://arxiv.org/html/2607.08938v1#S3)保持执行任务的模型不变，修改工具、hooks、上下文处理和子 agent。 | 使用修改后 harness 的目标模型，其任务结果和成本。 |
+| **模型权重** | [Multi-Harness RL](https://arxiv.org/html/2609.04518v1#S3)用多个 harness 产生的经验训练模型，再在未参与训练的 harness 上测试。 | 训练所用接口上的收益，以及迁移到另一接口后的表现。 |
+
+记录哪些案例用于产生更新，哪些决定是否接受更新，哪些衡量最终表现。更新成本应包括失败候选和评价运行。
 
 ---
 

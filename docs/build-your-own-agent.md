@@ -26,6 +26,8 @@ Every production coding agent must answer the same recurring design questions. C
 
 A graph can define dependencies and acceptance conditions while an agent inside each node chooses its next action. For example, [LangGraph's agent example](https://docs.langchain.com/oss/python/langgraph/workflows-agents#agents) uses conditional edges to follow the model's decision to call a tool or stop. A practical design can combine that structure with a feedback loop and a harness that executes actions and records results. The choice is which relationships to make explicit, and which decisions to leave open.
 
+**Keep earlier requirements in scope.** [LoopsBench](https://arxiv.org/html/2608.00267v1#S2.SS6) provides all attached tests from the start, but activates scoring for a development unit only after its prerequisites pass. Tests for completed units remain active as regression checks during later work. The agent remains free to choose where to edit.
+
 **Use a graph to review completed work, too.** [Trace2Flow](https://arxiv.org/html/2609.13136v1#S4) is a research prototype that turns a completed agent trace into an editable workflow graph. Users can inspect step inputs and outputs, change dependencies, and rerun steps. A control graph guides execution; this graph organizes recorded work afterward. Keep the connection between each step and its trace evidence.
 
 **Questions to ask yourself:**
@@ -50,6 +52,10 @@ A graph can define dependencies and acceptance conditions while an agent inside 
 **Lesson from Claude Code:** Layered checks need explicit fallback behavior. If parsing, classification, or a budget limit prevents one check from finishing, decide whether the action is denied, isolated, or sent for review. The presence of several checks alone does not establish that they fail independently.
 
 **Authorization has a scope and a lifetime.** Distinguish durable policy, operating mode, and a grant for a particular action or session. A delegated task or a resumed conversation should carry only the authority that remains valid for its current resources and environment. See [Decision 6](#decision-6-how-do-sessions-persist) for the persistence implications.
+
+**Separate information access from action authority.** [Twin Agent](https://arxiv.org/html/2607.19595v1#S3.SS3) limits the length of hints that a reader sends from untrusted sources to an executor. Only the executor can perform privileged actions, and it cannot read those sources directly. Define each agent's inputs and permissions, then check what can pass between them.
+
+[APPA v2](https://arxiv.org/html/2607.24625v2#S4) checks a tool call before execution and checks its actual return before the data enters context. It can use a temporary branch to inspect untrusted data, with a predefined return format. Rejecting returned data does not undo an external effect that already occurred.
 
 **Questions to ask yourself:**
 
@@ -120,6 +126,8 @@ Codex's September 8 [main-branch update](https://github.com/openai/codex/commit/
 
 Treat these as conceptual boundaries; implementations need not use these function names. For each extension, distinguish permission to install or update it from permission to perform its actions.
 
+**Define a tool operation across requests.** [MCP 2026-07-28](https://modelcontextprotocol.io/specification/2026-07-28/changelog) removes protocol-level sessions; applications carry cross-call state through explicit handles. When a tool needs more input, the [multi round-trip protocol](https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/mrtr) returns `input_required`; the client retries with `inputResponses` and returns any `requestState` unchanged. These are separate requests for one logical operation, so specify who owns its state and how retries handle effects that may have occurred.
+
 **Bind command consent to the reviewed inputs.** In [Claude Code v2.1.271](https://code.claude.com/docs/en/plugins-reference#plugin-install), a plugin install or update can require approval for a marketplace command. When the command is shown but not run, the `--json` result includes it and its digest. The user reviews the command, then passes `--accept-command <sha256>` from their own terminal. Acceptance is bound to the command, plugin, and marketplace catalog; a change to any of them invalidates it.
 
 **Questions to ask yourself:**
@@ -143,6 +151,10 @@ Treat these as conceptual boundaries; implementations need not use these functio
 **Lesson from Claude Code:** Context isolation can keep detailed exploration out of the parent conversation. It does not make delegation free: measure total model work, duplicated exploration, and coordination cost. Separate context windows also do not imply separate filesystems, processes, or permissions.
 
 **Define the handoff as well as the role.** A task needs an owner, dependencies, an output, and conditions for accepting that output. In [Agent Graph v0.3.0](https://github.com/context4ai/agent-graph/blob/387f80db65bf20a61bc666b4fa885200fcedad08/src/evaluator.ts#L137), a nonterminal node with a `satisfiedBy` condition remains `unverified` if it is marked completed but the supplied facts do not satisfy that condition. This is one concrete implementation of a completion check; the host still has to supply trustworthy facts.
+
+**Check concurrent changes before accepting them.** Separate worktrees let agents edit independently, but their changes can still conflict. The [Claim Plane prototype](https://arxiv.org/pdf/2607.21909v1) checks versioned change intents before writes and checks an expanded scope again before allowing the additional mutation. Task assignment, permission to write, and acceptance of the combined result need separate decisions.
+
+**Choose who owns shared session state.** With [Agent Host Protocol](https://code.visualstudio.com/blogs/2026/08/26/agent-host-architecture), the host owns the session and sends snapshots and ordered updates to multiple clients. Each harness retains its own agent loop, context management, and tools. A common session interface therefore still needs clear rules for when client actions take effect.
 
 **Specify when a message takes effect.** [VS Code 1.137](https://code.visualstudio.com/updates/v1_137#_agent-queued-messages) queues agent messages sent to a busy chat. It starts processing queued messages in send order after the active turn succeeds. Sending to another session through its [Agent Host tools](https://code.visualstudio.com/docs/agents/run/sessions/manage-sessions#_orchestrate-sessions-from-agent-host-sessions) requires user confirmation. Define delivery timing as well as permission to send.
 
@@ -172,6 +184,8 @@ Treat these as conceptual boundaries; implementations need not use these functio
 **Persistence also needs a recovery protocol.** Record which task a worker owns, which effects have completed, and which results still need delivery. After a crash, define who may retry and how duplicate effects are prevented or reconciled. A checkpoint alone does not establish exactly-once execution.
 
 For example, Temporal's Deep Agents integration, [announced as a pre-release](https://temporal.io/blog/durable-digest-august-2026), separates replayable Workflow state from model calls and external I/O in Activities. Its [integration guide](https://docs.temporal.io/develop/python/integrations/deepagents) requires real-I/O tools and backends to be wrapped appropriately. Durability depends on those execution boundaries.
+
+**Distinguish a retry from new work.** [Resume Means Resume v3](https://arxiv.org/html/2608.03836v3#S3) separates ordinary resumption from an intended fork and checks whether an approval has already been consumed. Preserve operation identities when an external effect may have completed before its result was recorded. Also define what remains in progress during a pause: [Temporal's pre-release pause feature](https://docs.temporal.io/encyclopedia/workflow/workflow-pause) stops new dispatch while running Activities can still finish.
 
 **Give schedules and active runs separate controls.** [VS Code Automations](https://code.visualstudio.com/docs/agents/run/automations) is in Preview. Disabling its schedule prevents future scheduled runs but leaves the active run in progress; stopping that session is a separate action. Scheduled work also requires an awake machine: Agent Host automations need a running host process, while other automations need a running VS Code window.
 
@@ -210,6 +224,17 @@ These decisions meet at the points where the system accepts work, resumes it, or
 Mastra Factory's current [board rules](https://factory.mastra.ai/configure/boards-and-rules) separate allowed stage transitions, approval policies, and entry and exit actions. Listing a transition does not move a card automatically. Test what triggers the move, whether approval is required, who provides it, and which actions run when the card leaves or enters a stage.
 
 [LoopArena](https://arxiv.org/html/2608.28281v1#S2) evaluates control decisions with a fixed Worker; its read-only Reporter summarizes evidence and cannot run tests. [HarnessLens](https://arxiv.org/html/2608.27311v1#S4) selects checks around the behavior a proposed change should affect and keeps a held-out test set. For skill updates, distinguish the cases that decide acceptance from those reserved for final testing: [SkillAdam](https://arxiv.org/html/2609.08944v1#S5.SS3) reuses sampled cases for acceptance and keeps a separate test split.
+
+**Specify what an update changes.** Memory, skills, runtime code, and model weights need different checks.
+
+| Updated object | Representative mechanism | What to check |
+|:---------------|:-------------------------|:--------------|
+| **Retrievable memory** | [Living-Harness v2](https://arxiv.org/html/2607.26598v2) updates memory and a state graph after evaluated runs. Later tasks retrieve these records as guidance. | Evidence, scope, and later retrieval of corrected guidance. |
+| **Skills and their relations** | [GSE](https://arxiv.org/html/2608.06153v1#S3) changes skill content and relations between skills, including dependencies and conflicts. | Replay cases for affected skills, then test on separate cases. |
+| **Runtime code and tools** | [Better Harnesses, Smaller Models](https://arxiv.org/html/2607.08938v1#S3) changes tools, hooks, context handling, and subagents while keeping the task model fixed. | Task results and costs with the model that will use the changed harness. |
+| **Model weights** | [Multi-Harness RL](https://arxiv.org/html/2609.04518v1#S3) trains on experience from several harnesses and tests on an unseen harness. | Gains on the training interfaces and transfer to a different interface. |
+
+Record which cases produce an update, which decide whether to accept it, and which measure its final performance. Include failed candidates and evaluation runs in the update cost.
 
 ---
 
