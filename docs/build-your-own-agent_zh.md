@@ -6,7 +6,7 @@
 
 每个生产级编码智能体都要回答同样的几个设计问题。Claude Code 给出的是其中一套答案。本指南介绍这些选择如何组合，以及你需要什么证据来判断它们是否适合自己的系统。
 
-**阅读范围：** 本文的 Claude Code 架构示例以本仓库分析的 v2.1.88 源码快照为准，后续产品变化和跨系统对照会单独标明。来源核验截至 2026 年 9 月 7 日；证据及限制见[架构分析](architecture_zh.md)和[来源说明](agent-design-space-source-notes_zh.md)。
+**阅读范围：** 本文的 Claude Code 架构示例以本仓库分析的 v2.1.88 源码快照为准，后续产品变化和跨系统对照会单独标明。来源核验截至 2026 年 9 月 15 日；证据及限制见[架构分析](architecture_zh.md)和[来源说明](agent-design-space-source-notes_zh.md)。
 
 ---
 
@@ -22,9 +22,11 @@
 
 **从 Claude Code 得到的启发：** 一个简洁的推理循环可以依赖大量基础设施。上下文供给、工具执行、恢复和验证都值得单独设计。应结合自己的工作负载评估模型与 harness；代码占比或榜单分差都不足以决定需要多少脚手架。
 
-**Graph Engineering 放在哪里：** 2026 年的 [Graph Engineering 综述](https://arxiv.org/html/2608.21156v2#S4)从任务结构、agent 协调和运行状态三个方面组织问题。这个视角有助于明确依赖关系、职责和完成条件。它讨论的范围比用知识图谱做检索更广，也延续了此前基于图的 agent 研究。
+**Graph Engineering 放在哪里：** 2026 年的 [Graph Engineering 综述](https://arxiv.org/html/2608.21156v2#S4)从任务结构、agent 协调和运行状态三个方面组织问题。这个框架有助于明确依赖关系、职责和完成条件。它讨论的范围比用知识图谱做检索更广，也延续了此前基于图的 agent 研究。
 
 图可以规定依赖和验收条件，节点内的 agent 则自主选择下一步行动。例如，[LangGraph 的 agent 示例](https://docs.langchain.com/oss/python/langgraph/workflows-agents#agents)通过条件边，根据模型是否调用工具来决定继续还是停止。实际设计中，可以把这样的结构与反馈循环结合，由 harness 执行动作并记录结果。需要选择的是哪些关系必须明确表达，哪些决策可以保持开放。
+
+**图也可以用于审查已完成的工作。** [Trace2Flow](https://arxiv.org/html/2609.13136v1#S4) 是一个研究原型，它把已完成的 agent 执行轨迹转成可编辑的工作流图。用户可以查看每步的输入输出、修改依赖并重新运行步骤。控制图指导执行，这种图则在运行后组织已记录的工作。应保留每个步骤与其轨迹证据的联系。
 
 **可以问自己的问题：**
 
@@ -86,6 +88,10 @@
 
 对于可复用经验，需要规定哪些内容值得保存、何时重新核验，以及纠正如何影响后续检索。Codex 的[整合指令](https://github.com/openai/codex/blob/3d2ee51ca2d5db578f328aa75e20aa22c0197c9a/codex-rs/memories/write/templates/memories/consolidation.md#L157)要求模型删除仅由已移除输入支持的指导，同时保留仍有来源支持的内容。这是一套需要验证的更新协议，不能保证每条过时记忆都会被正确清除。必须遵守的规则应保存在明确的策略或指令文件中。
 
+Codex 9 月 8 日的[主线更新](https://github.com/openai/codex/commit/2cbbf0c9b542a36a1c3284b5e804917635b6f666)增加记忆 v2，读取路径使用选定版本。[稳定版 0.154.0 的记忆配置](https://github.com/openai/codex/blob/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/config/src/types.rs#L289)没有版本选择器。
+
+**明确记忆的使用范围和修改权限。** [v2 提取指令](https://github.com/openai/codex/blob/2cbbf0c9b542a36a1c3284b5e804917635b6f666/codex-rs/memories/write/templates/memories/stage_one_system_v2.md)要求模型区分特定任务的要求与长期偏好，并在任务范围内应用后来的纠正。Claude Tag 的[公共频道便笺](https://github.com/anthropics/claude-code/releases/tag/v2.1.268)仅供本频道召回，工作区便笺则仍然共享。[Hermes Agent v0.21.2](https://github.com/NousResearch/hermes-agent/blob/939e45c91d751fadd94dcd1b873ac3cb44846213/tools/memory_tool.py#L129) 的内置记忆工具在无人值守的后台复盘中，要求先获批准才能替换或删除记忆。
+
 **可以问自己的问题：**
 
 - 目标、约束、待办、权限和证据中，哪些内容必须跨压缩或窗口重置保留？
@@ -114,6 +120,8 @@
 
 这里描述的是概念边界，实现不必使用这些函数名。对每个扩展，都要区分安装或更新权限与实际执行动作的权限。
 
+**将命令授权绑定到已审阅的输入。** 在 [Claude Code v2.1.271](https://code.claude.com/docs/en/plugins-reference#plugin-install) 中，安装或更新插件可能需要用户批准市场声明的命令。命令显示但未执行时，`--json` 结果会包含该命令及其摘要值。用户审阅命令后，在自己的终端中传入 `--accept-command <sha256>`。同意绑定到该命令、插件和市场目录，任一项变化都会使其失效。
+
 **可以问自己的问题：**
 
 - 智能体会暴露多少工具，它们的 schema 何时进入上下文？
@@ -135,6 +143,10 @@
 **从 Claude Code 得到的启发：** 上下文隔离可以把详细探索留在子会话里。委派仍有成本，需要测量总模型工作量、重复探索和协调开销。独立上下文也不意味着文件系统、进程或权限相互隔离。
 
 **定义角色时，也要定义交接条件。** 每项任务都需要负责人、依赖、交付物和验收条件。[Agent Graph v0.3.0](https://github.com/context4ai/agent-graph/blob/387f80db65bf20a61bc666b4fa885200fcedad08/src/evaluator.ts#L137)提供了一个具体例子：对于带 `satisfiedBy` 条件的非终止节点，如果仅被标记为完成，而输入事实不满足条件，结果仍是 `unverified`。这实现了一种完成检查；宿主系统仍需负责提供可信事实。
+
+**明确消息何时生效。** [VS Code 1.137](https://code.visualstudio.com/updates/v1_137#_agent-queued-messages) 会将 agent 发给忙碌 chat 的消息排队，当前回合成功结束后再按发送顺序开始处理排队消息。通过其 [Agent Host 工具](https://code.visualstudio.com/docs/agents/run/sessions/manage-sessions#_orchestrate-sessions-from-agent-host-sessions) 向另一会话发送消息需要用户确认。既要规定发送权限，也要规定交付时机。
+
+**明确 worker 能否质疑任务简报。** Cognition 在 [Fusion 设计说明](https://cognition.com/blog/local-fusion)中介绍了按模型组合调整简报细度、worker 质疑指令的空间，以及探索分工的做法。应把这些选择纳入委派协议，再用自己的模型和任务进行检验。
 
 **可以问自己的问题：**
 
@@ -160,6 +172,8 @@
 **持久化还需要恢复协议。** 应记录哪个 worker 负责哪项任务、哪些外部动作已经完成，以及哪些结果仍待交付。发生崩溃后，要明确谁有权重试，怎样避免或处理重复副作用。仅有检查点，并不能保证外部操作恰好执行一次。
 
 例如，Temporal 的 Deep Agents 集成在[发布时标为 pre-release](https://temporal.io/blog/durable-digest-august-2026)，将可重放的 Workflow 状态与 Activity 中的模型调用、外部 I/O 分开。[集成文档](https://docs.temporal.io/develop/python/integrations/deepagents)要求按规定包装会访问外部资源的工具和后端；持久执行依赖这些边界得到正确实现。
+
+**为计划和活跃运行分别设置控制。** [VS Code Automations](https://code.visualstudio.com/docs/agents/run/automations) 处于 Preview。禁用计划会阻止后续计划运行，但不会停止当前运行；停止该会话是另一项操作。计划执行还要求机器保持唤醒：Agent Host 类型的自动化需要宿主进程运行，其他类型需要 VS Code 窗口运行。
 
 **可以问自己的问题：**
 
@@ -193,7 +207,9 @@
 | **恢复或重试** | 当前任务归属、有效授权和此前外部动作的状态；输入或环境变化后，重新检查受影响的证据。 |
 | **保留记忆、skill 或 harness 改动** | 支持该更新的轨迹、明确的适用范围、回归检查，以及修订或撤回更新的方式。 |
 
-[LoopArena](https://arxiv.org/html/2608.28281v1#S2)在固定 Worker 的条件下评估控制决策；它的只读 Reporter 负责整理证据，不能运行测试。[HarnessLens](https://arxiv.org/html/2608.27311v1#S4)围绕候选改动的目标行为选择检查任务，并保留独立测试集。它们在各自实验设置内提供了评估控制与改进的方法。进度摘要、结果预测或小规模回归样本，仍不足以证明任意部署中的任务已经成功。
+Mastra Factory 当前的[看板规则](https://factory.mastra.ai/configure/boards-and-rules)分别定义允许的阶段转移、审批策略，以及进入和离开阶段时执行的动作。列出允许的转移不会自动移动卡片。应检查什么事件触发移动、是否需要审批、由谁审批，以及卡片离开或进入阶段时运行哪些动作。
+
+[LoopArena](https://arxiv.org/html/2608.28281v1#S2)在固定 Worker 的条件下评估控制决策；它的只读 Reporter 负责整理证据，不能运行测试。[HarnessLens](https://arxiv.org/html/2608.27311v1#S4)围绕候选改动的目标行为选择检查任务，并保留独立测试集。评估技能更新时，应区分决定是否接受修改的案例与留作最终测试的案例：[SkillAdam](https://arxiv.org/html/2609.08944v1#S5.SS3)复用采样案例判断是否接受修改，并另留测试集。
 
 ---
 

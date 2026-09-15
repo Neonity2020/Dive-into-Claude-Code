@@ -6,7 +6,7 @@
 
 Every production coding agent must answer the same recurring design questions. Claude Code is one set of answers. This guide maps the choices, explains where they can be combined, and asks what evidence would justify them in your own system.
 
-**Scope:** Claude Code architecture examples refer to the v2.1.88 snapshot analyzed in this repository. Later product releases and cross-system comparisons are identified separately; sources were reviewed through September 7, 2026. See the [architecture analysis](architecture.md) and [source notes](agent-design-space-source-notes.md) for evidence and limitations.
+**Scope:** Claude Code architecture examples refer to the v2.1.88 snapshot analyzed in this repository. Later product releases and cross-system comparisons are identified separately; sources were reviewed through September 15, 2026. See the [architecture analysis](architecture.md) and [source notes](agent-design-space-source-notes.md) for evidence and limitations.
 
 ---
 
@@ -22,9 +22,11 @@ Every production coding agent must answer the same recurring design questions. C
 
 **Lesson from Claude Code:** A small reasoning loop can rely on substantial infrastructure. Context delivery, tool execution, recovery, and verification deserve their own design effort. Evaluate the model and harness together on your workload; neither code size nor a leaderboard gap determines the right amount of scaffolding.
 
-**Where Graph Engineering fits:** The 2026 [Graph Engineering survey](https://arxiv.org/html/2608.21156v2#S4) organizes the problem around task structure, agent coordination, and runtime state. This is a useful lens for making dependencies, responsibilities, and completion conditions explicit. It is broader than using a knowledge graph for retrieval, and it builds on earlier graph-based agent work.
+**Where Graph Engineering fits:** The 2026 [Graph Engineering survey](https://arxiv.org/html/2608.21156v2#S4) organizes the problem around task structure, agent coordination, and runtime state. This framework helps builders make dependencies, responsibilities, and completion conditions explicit. It is broader than using a knowledge graph for retrieval, and it builds on earlier graph-based agent work.
 
 A graph can define dependencies and acceptance conditions while an agent inside each node chooses its next action. For example, [LangGraph's agent example](https://docs.langchain.com/oss/python/langgraph/workflows-agents#agents) uses conditional edges to follow the model's decision to call a tool or stop. A practical design can combine that structure with a feedback loop and a harness that executes actions and records results. The choice is which relationships to make explicit, and which decisions to leave open.
+
+**Use a graph to review completed work, too.** [Trace2Flow](https://arxiv.org/html/2609.13136v1#S4) is a research prototype that turns a completed agent trace into an editable workflow graph. Users can inspect step inputs and outputs, change dependencies, and rerun steps. A control graph guides execution; this graph organizes recorded work afterward. Keep the connection between each step and its trace evidence.
 
 **Questions to ask yourself:**
 
@@ -86,6 +88,10 @@ This design separates editable working notes from retrievable history. It makes 
 
 For reusable experience, define what qualifies for storage, when it should be rechecked, and how corrections reach future retrieval. Codex's [consolidation instructions](https://github.com/openai/codex/blob/3d2ee51ca2d5db578f328aa75e20aa22c0197c9a/codex-rs/memories/write/templates/memories/consolidation.md#L157) ask the model to remove guidance supported only by deleted inputs while preserving guidance with surviving support. That is an update protocol to test, not a guarantee that every stale memory will disappear. Keep mandatory rules in explicit policy or instruction files.
 
+Codex's September 8 [main-branch update](https://github.com/openai/codex/commit/2cbbf0c9b542a36a1c3284b5e804917635b6f666) adds memory v2; the read path uses the selected version. The [stable 0.154.0 memory configuration](https://github.com/openai/codex/blob/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/config/src/types.rs#L289) has no version selector.
+
+**Define where memory can be used and who can change it.** The [v2 extraction instructions](https://github.com/openai/codex/blob/2cbbf0c9b542a36a1c3284b5e804917635b6f666/codex-rs/memories/write/templates/memories/stage_one_system_v2.md) ask the model to distinguish task-specific requests from lasting preferences and apply later corrections within the task. Claude Tag's [public-channel notes](https://github.com/anthropics/claude-code/releases/tag/v2.1.268) can be recalled only within their channel, while workspace notes remain shared. In [Hermes Agent v0.21.2](https://github.com/NousResearch/hermes-agent/blob/939e45c91d751fadd94dcd1b873ac3cb44846213/tools/memory_tool.py#L129), the built-in memory tool requires approval to replace or remove memory during unattended background reviews.
+
 **Questions to ask yourself:**
 
 - What must survive compaction or a window reset: the goal, constraints, pending work, permissions, and evidence?
@@ -114,6 +120,8 @@ For reusable experience, define what qualifies for storage, when it should be re
 
 Treat these as conceptual boundaries; implementations need not use these function names. For each extension, distinguish permission to install or update it from permission to perform its actions.
 
+**Bind command consent to the reviewed inputs.** In [Claude Code v2.1.271](https://code.claude.com/docs/en/plugins-reference#plugin-install), a plugin install or update can require approval for a marketplace command. When the command is shown but not run, the `--json` result includes it and its digest. The user reviews the command, then passes `--accept-command <sha256>` from their own terminal. Acceptance is bound to the command, plugin, and marketplace catalog; a change to any of them invalidates it.
+
 **Questions to ask yourself:**
 
 - How many tools will your agent expose, and when will their schemas enter context?
@@ -135,6 +143,10 @@ Treat these as conceptual boundaries; implementations need not use these functio
 **Lesson from Claude Code:** Context isolation can keep detailed exploration out of the parent conversation. It does not make delegation free: measure total model work, duplicated exploration, and coordination cost. Separate context windows also do not imply separate filesystems, processes, or permissions.
 
 **Define the handoff as well as the role.** A task needs an owner, dependencies, an output, and conditions for accepting that output. In [Agent Graph v0.3.0](https://github.com/context4ai/agent-graph/blob/387f80db65bf20a61bc666b4fa885200fcedad08/src/evaluator.ts#L137), a nonterminal node with a `satisfiedBy` condition remains `unverified` if it is marked completed but the supplied facts do not satisfy that condition. This is one concrete implementation of a completion check; the host still has to supply trustworthy facts.
+
+**Specify when a message takes effect.** [VS Code 1.137](https://code.visualstudio.com/updates/v1_137#_agent-queued-messages) queues agent messages sent to a busy chat. It starts processing queued messages in send order after the active turn succeeds. Sending to another session through its [Agent Host tools](https://code.visualstudio.com/docs/agents/run/sessions/manage-sessions#_orchestrate-sessions-from-agent-host-sessions) requires user confirmation. Define delivery timing as well as permission to send.
+
+**Decide whether a worker may question its brief.** In its [Fusion design account](https://cognition.com/blog/local-fusion), Cognition describes adjusting brief detail, how much the worker may question instructions, and exploration duties for each model pair. Include these choices in the delegation protocol and test them with the models and tasks you use.
 
 **Questions to ask yourself:**
 
@@ -160,6 +172,8 @@ Treat these as conceptual boundaries; implementations need not use these functio
 **Persistence also needs a recovery protocol.** Record which task a worker owns, which effects have completed, and which results still need delivery. After a crash, define who may retry and how duplicate effects are prevented or reconciled. A checkpoint alone does not establish exactly-once execution.
 
 For example, Temporal's Deep Agents integration, [announced as a pre-release](https://temporal.io/blog/durable-digest-august-2026), separates replayable Workflow state from model calls and external I/O in Activities. Its [integration guide](https://docs.temporal.io/develop/python/integrations/deepagents) requires real-I/O tools and backends to be wrapped appropriately. Durability depends on those execution boundaries.
+
+**Give schedules and active runs separate controls.** [VS Code Automations](https://code.visualstudio.com/docs/agents/run/automations) is in Preview. Disabling its schedule prevents future scheduled runs but leaves the active run in progress; stopping that session is a separate action. Scheduled work also requires an awake machine: Agent Host automations need a running host process, while other automations need a running VS Code window.
 
 **Questions to ask yourself:**
 
@@ -193,7 +207,9 @@ These decisions meet at the points where the system accepts work, resumes it, or
 | **Resume or retry** | Current task ownership, valid authority, and the status of prior side effects. Recheck evidence affected by changed inputs or environments. |
 | **Retain a memory, skill, or harness change** | Supporting traces, an explicit scope, checks for regressions, and a way to revise or withdraw the update. |
 
-[LoopArena](https://arxiv.org/html/2608.28281v1#S2) evaluates control decisions with a fixed Worker; its read-only Reporter summarizes evidence and cannot run tests. [HarnessLens](https://arxiv.org/html/2608.27311v1#S4) selects checks around the behavior a proposed change should affect and keeps a held-out test set. These offer methods for assessing control and improvement, within their experimental settings. They do not make a progress summary, predicted outcome, or small regression sample sufficient evidence of success in every deployment.
+Mastra Factory's current [board rules](https://factory.mastra.ai/configure/boards-and-rules) separate allowed stage transitions, approval policies, and entry and exit actions. Listing a transition does not move a card automatically. Test what triggers the move, whether approval is required, who provides it, and which actions run when the card leaves or enters a stage.
+
+[LoopArena](https://arxiv.org/html/2608.28281v1#S2) evaluates control decisions with a fixed Worker; its read-only Reporter summarizes evidence and cannot run tests. [HarnessLens](https://arxiv.org/html/2608.27311v1#S4) selects checks around the behavior a proposed change should affect and keeps a held-out test set. For skill updates, distinguish the cases that decide acceptance from those reserved for final testing: [SkillAdam](https://arxiv.org/html/2609.08944v1#S5.SS3) reuses sampled cases for acceptance and keeps a separate test split.
 
 ---
 
